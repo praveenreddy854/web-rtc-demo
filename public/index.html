@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Azure OpenAI Realtime Session</title>
+    <!-- Include Azure Speech SDK before other scripts -->
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <h1>Azure OpenAI Realtime Session</h1>
+    <p>
+      WARNING: Don't use this code sample in production with the API key
+      hardcoded. Use a protected backend service to call the sessions API and
+      generate the ephemeral key. Then return the ephemeral key to the client.
+    </p>
+    <button id="enableMicBtn">Enable Assistant</button>
+    <button id="startSessionBtn">Start Session</button>
+    <p id="voiceStatus" class="listening">
+      Voice trigger: Always listening for "assistant" or "Hey assistant"
+    </p>
+    <p>
+      <small
+        >During an active session, say <strong>"stop"</strong> or
+        <strong>"stop it shut up"</strong> to close the session.</small
+      >
+    </p>
+
+    <!-- Log container for API messages -->
+    <div id="logContainer"></div>
+    <script src="/js/microsoft.cognitiveservices.speech.sdk.bundle.js"></script>
+    <script src="/js/main.js" type="module"></script>
+  </body>
+</html>
