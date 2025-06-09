@@ -1,5 +1,8 @@
 import { azureOpenAIKey, getSpeechKey } from "./settings.js";
-import { initializeAzureSpeech, startWakeWordDetection } from "./azure-stt.js";
+import {
+  initializeAzureSpeech,
+  startWakeOrStopWordDetection,
+} from "./azure-stt.js";
 
 const WEBRTC_URL =
   "https://eastus2.realtimeapi-preview.ai.azure.com/v1/realtimertc";
@@ -7,6 +10,7 @@ const DEPLOYMENT = "gpt-4o-mini-realtime-preview";
 const VOICE = "verse";
 
 let wakeWordDetector = null;
+let inSessionStopWordDetector = null;
 let currentSession = null;
 let peerConnection = null;
 let dataChannel = null;
@@ -68,11 +72,16 @@ async function initWakeWordDetection() {
     }
 
     // Start listening for wake word
-    wakeWordDetector = startWakeWordDetection(
+    wakeWordDetector = startWakeOrStopWordDetection(
       (text) => {
         logMessage("Wake word detected: " + text);
         setVoiceStatus("Wake word detected! Starting session...");
         startSessionFromWake();
+      },
+      (text) => {
+        logMessage("Stop word detected: " + text);
+        setVoiceStatus("Stop word detected! Ending session...");
+        onSessionEnded();
       },
       (error) => {
         logMessage("Wake word detection error: " + error.message);
@@ -91,6 +100,10 @@ async function startSessionFromWake() {
   // Stop wake word detection while session is active
   if (wakeWordDetector && wakeWordDetector.isActive()) {
     wakeWordDetector.stop();
+  }
+  // Stop any previous in-session stop word detector
+  if (inSessionStopWordDetector && inSessionStopWordDetector.isActive()) {
+    inSessionStopWordDetector.stop();
   }
   setVoiceStatus("Session active! Say 'stop' to end the session.");
   logMessage("Connecting to OpenAI real-time session...");
@@ -205,7 +218,6 @@ async function startSessionFromWake() {
       }
     };
 
-    // Step 4: Create offer and set local description
     // Step 4: Add audio track to peer connection
     const localStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -213,12 +225,6 @@ async function startSessionFromWake() {
     localStream.getAudioTracks().forEach((track) => {
       peerConnection.addTrack(track, localStream);
     });
-    // Debug: Route local audio to browser (muted) to confirm local stream is active
-    const localAudio = document.createElement("audio");
-    localAudio.srcObject = localStream;
-    localAudio.autoplay = true;
-    localAudio.muted = true;
-    document.body.appendChild(localAudio);
 
     // Step 5: Create offer and set local description
     const offer = await peerConnection.createOffer();
@@ -227,11 +233,22 @@ async function startSessionFromWake() {
     // Save session info to allow cleanup later
     currentSession = { data, peerConnection, dataChannel };
 
-    // Disable send button/input until data channel opens
-    const sendBtn = document.getElementById("sendBtn");
-    const userInput = document.getElementById("userInput");
-    if (sendBtn) sendBtn.disabled = true;
-    if (userInput) userInput.disabled = true;
+    // --- Start in-session stop word detection ---
+    const speechCredentials = await getSpeechKey();
+    if (speechCredentials.token) {
+      initializeAzureSpeech(speechCredentials.token, speechCredentials.region);
+      inSessionStopWordDetector = startWakeOrStopWordDetection(
+        null, // No wake word needed during session
+        (text) => {
+          logMessage("Stop word detected (in-session): " + text);
+          setVoiceStatus("Stop word detected! Ending session...");
+          onSessionEnded();
+        },
+        (error) => {
+          logMessage("In-session stop word detection error: " + error.message);
+        }
+      );
+    }
 
     // Optional: End session after 60s (replace with real logic)
     setTimeout(() => {
@@ -263,6 +280,12 @@ function onSessionEnded() {
     // remoteAudio.remove();
   }
 
+  // Stop in-session stop word detector if running
+  if (inSessionStopWordDetector && inSessionStopWordDetector.isActive()) {
+    inSessionStopWordDetector.stop();
+    inSessionStopWordDetector = null;
+  }
+
   // Disable send button and input
   const sendBtn = document.getElementById("sendBtn");
   const userInput = document.getElementById("userInput");
@@ -285,37 +308,6 @@ document.getElementById("startSessionBtn")?.addEventListener("click", () => {
   }
 });
 
-// --- Send message handler ---
-document.getElementById("sendBtn")?.addEventListener("click", () => {
-  const input = document.getElementById("userInput");
-  if (!input || !dataChannel || dataChannel.readyState !== "open") return;
-  const message = input.value.trim();
-  if (!message) return;
-
-  // Send message over data channel
-  dataChannel.send(message);
-  addChatMessage("user", message);
-  logMessage("Sent message to OpenAI: " + message);
-
-  // Clear input
-  input.value = "";
-
-  // If user says anything equivalent to 'stop', end session
-  const stopKeywords = [
-    "stop",
-    "end",
-    "quit",
-    "exit",
-    "terminate",
-    "stop it",
-    "shut up",
-  ];
-  if (stopKeywords.includes(message.toLowerCase())) {
-    logMessage("User requested to stop session.");
-    onSessionEnded();
-  }
-});
-
 // --- On page load ---
 window.addEventListener("DOMContentLoaded", () => {
   setVoiceStatus("Click 'Enable Assistant' to start listening.");
@@ -326,10 +318,4 @@ window.addEventListener("DOMContentLoaded", () => {
       "Listening for wake word (say 'assistant' or 'hey assistant')"
     );
   };
-
-  // Disable send button and input initially
-  const sendBtn = document.getElementById("sendBtn");
-  const userInput = document.getElementById("userInput");
-  if (sendBtn) sendBtn.disabled = true;
-  if (userInput) userInput.disabled = true;
 });

@@ -11,6 +11,15 @@ let assistantWakeWords = [
   "hey, assistant",
   "okay assistant",
 ];
+export const assistantStopWords = [
+  "stop",
+  "end",
+  "quit",
+  "exit",
+  "terminate",
+  "stop it",
+  "shut up",
+];
 
 /**
  * Initialize the Azure Speech services
@@ -33,10 +42,15 @@ export function initializeAzureSpeech(token, region) {
 /**
  * Detects if a wake word is spoken in the audio input
  * @param {Function} onWakeWordDetected - Callback function to execute when wake word is detected
+ * @param {Function} onStopWordDetected - Callback function to execute when stop word is detected
  * @param {Function} onError - Callback function for errors
  * @returns {Object} - Object with stop method to stop listening
  */
-export function startWakeWordDetection(onWakeWordDetected, onError) {
+export function startWakeOrStopWordDetection(
+  onWakeWordDetected,
+  onStopWordDetected,
+  onError
+) {
   if (!speechConfig) {
     const error = new Error(
       "Speech config not initialized. Call initializeAzureSpeech first."
@@ -72,10 +86,19 @@ export function startWakeWordDetection(onWakeWordDetected, onError) {
       const foundWakeWord = assistantWakeWords.find((wakeWord) =>
         text.includes(wakeWord)
       );
+      const foundStopWord = assistantStopWords.find((stopWord) =>
+        text.includes(stopWord)
+      );
+
       if (foundWakeWord) {
         console.log("Wake word detected:", foundWakeWord);
         if (onWakeWordDetected) {
           onWakeWordDetected(text);
+        }
+      } else if (foundStopWord) {
+        console.log("Stop word detected:", foundStopWord);
+        if (onStopWordDetected) {
+          onStopWordDetected(text);
         }
       }
     } else if (result.reason === window.SpeechSDK.ResultReason.NoMatch) {
