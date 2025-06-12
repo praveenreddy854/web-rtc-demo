@@ -1,4 +1,4 @@
-import { azureOpenAIKey, getSpeechKey } from "./settings.js";
+import { getCachedSpeechKey } from "./settings.js";
 import {
   initializeAzureSpeech,
   startWakeOrStopWordDetection,
@@ -51,7 +51,7 @@ async function initWakeWordDetection() {
   logMessage("Initializing Azure Speech for wake word detection...");
 
   try {
-    const speechCredentials = await getSpeechKey();
+    const speechCredentials = await getCachedSpeechKey();
 
     if (!speechCredentials.token) {
       logMessage("Failed to get speech credentials.");
@@ -234,7 +234,7 @@ async function startSessionFromWake() {
     currentSession = { data, peerConnection, dataChannel };
 
     // --- Start in-session stop word detection ---
-    const speechCredentials = await getSpeechKey();
+    const speechCredentials = await getCachedSpeechKey();
     if (speechCredentials.token) {
       initializeAzureSpeech(speechCredentials.token, speechCredentials.region);
       inSessionStopWordDetector = startWakeOrStopWordDetection(

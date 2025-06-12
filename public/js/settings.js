@@ -3,6 +3,10 @@
 // The region should match the region of your Azure resources
 export const serviceRegion = "eastus2";
 
+// Cached Speech Key Helper
+let cachedSpeechCredentials = null;
+let cachedSpeechCredentialsExpiry = 0;
+
 // This should be replaced with a secure way to access keys
 // In a real app, the API key should NEVER be exposed to the client
 export const azureOpenAIKey = ""; // This will be replaced by fetching from server
@@ -24,7 +28,7 @@ export async function getAPIKey() {
 }
 
 // Function to get Speech API key
-export async function getSpeechKey() {
+async function getSpeechKey() {
   try {
     const response = await fetch("/api/get-speech-token");
     const data = await response.json();
@@ -36,4 +40,28 @@ export async function getSpeechKey() {
     console.error("Error fetching Speech token:", error);
     return { token: "", region: serviceRegion };
   }
+}
+
+/**
+ * Get Azure Speech credentials, caching them in-memory until shortly before expiry.
+ * Use this in place of getSpeechKey() everywhere except for forced refresh.
+ */
+// Returns cached speech token if valid, otherwise fetches a new one
+export async function getCachedSpeechKey() {
+  const now = Date.now();
+  const SAFETY_MARGIN_MS = 60 * 1000; // 1 minute safety margin
+
+  if (
+    cachedSpeechCredentials &&
+    cachedSpeechCredentialsExpiry > now + SAFETY_MARGIN_MS
+  ) {
+    return cachedSpeechCredentials;
+  }
+
+  const creds = await getSpeechKey();
+  // Assume token is valid for 9 minutes if not specified
+  cachedSpeechCredentials = creds;
+  cachedSpeechCredentialsExpiry =
+    now + (creds.expires_in ? creds.expires_in * 1000 : 9 * 60 * 1000);
+  return creds;
 }
